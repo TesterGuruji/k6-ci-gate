@@ -1,0 +1,12 @@
+{
+  "name": "rea-demo-shop-api",
+  "version": "1.0.0",
+  "description": "TesterGuruJi demo shop API with planted bugs (for REA / HAR / load-test videos). NOT for production.",
+  "main": "server.js",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node smoke-test.js"
+  }
+}

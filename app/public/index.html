@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo Shop · TesterGuruJi</title>
+<style>
+  :root { --ink:#1d1d1b; --muted:#6b6a65; --line:#dedcd5; --bg:#faf9f6; --card:#fff; --accent:#c2410c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  header { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--line); background:var(--card); }
+  header strong { font-size:17px; }
+  .banner { background:#fff3e8; color:#7c2d12; padding:8px 24px; font-size:13px; border-bottom:1px solid #f5d3b8; }
+  main { max-width:860px; margin:24px auto; padding:0 16px; display:grid; gap:16px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; }
+  h2 { margin:0 0 10px; font-size:15px; }
+  input, button { font:inherit; padding:8px 10px; border-radius:7px; border:1px solid var(--line); }
+  button { background:var(--ink); color:#fff; border-color:var(--ink); cursor:pointer; }
+  button.secondary { background:#fff; color:var(--ink); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  table { width:100%; border-collapse:collapse; }
+  td, th { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); }
+  .muted { color:var(--muted); font-size:13px; }
+  .hidden { display:none; }
+  #msg { min-height:20px; color:var(--accent); font-size:14px; }
+</style>
+</head>
+<body>
+<header><strong>Demo Shop</strong><span id="hello" class="muted">Not signed in</span></header>
+<div class="banner">Deliberately buggy training app for TesterGuruJi videos. Run on localhost only. Test login: tester / Test@123</div>
+<main>
+  <div id="msg"></div>
+
+  <section id="loginBox">
+    <h2>1. Sign in</h2>
+    <div class="row">
+      <input id="username" value="tester" aria-label="Username">
+      <input id="password" type="password" value="Test@123" aria-label="Password">
+      <button id="loginBtn">Sign in</button>
+    </div>
+  </section>
+
+  <section id="shop" class="hidden">
+    <h2>2. Search products</h2>
+    <div class="row">
+      <input id="q" value="shirt" aria-label="Search">
+      <button id="searchBtn">Search</button>
+    </div>
+    <table><thead><tr><th>Product</th><th>Price</th><th>Qty</th><th></th></tr></thead><tbody id="results"></tbody></table>
+  </section>
+
+  <section id="cartBox" class="hidden">
+    <h2>3. Cart</h2>
+    <table><tbody id="cartItems"></tbody></table>
+    <p>Total: <strong id="total">0</strong></p>
+    <button id="checkoutBtn">Checkout</button>
+  </section>
+</main>
+<script>
+  let token = null, csrfToken = null, cartId = null;
+  const $ = (id) => document.getElementById(id);
+  const say = (t) => { $('msg').textContent = t; };
+
+  async function call(method, url, body, needsCsrf) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = 'Bearer ' + token;
+    if (needsCsrf) headers['X-CSRF-Token'] = csrfToken;
+    const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.status);
+    return data;
+  }
+
+  $('loginBtn').onclick = async () => {
+    try {
+      const data = await call('POST', '/api/login', { username: $('username').value, password: $('password').value });
+      token = data.token; csrfToken = data.csrfToken;
+      // The page only shows the name, but /api/profile returns much more.
+      const profile = await call('GET', '/api/profile');
+      $('hello').textContent = 'Hi, ' + profile.name;
+      $('loginBox').classList.add('hidden');
+      $('shop').classList.remove('hidden');
+      say('');
+    } catch (e) { say('Login failed: ' + e.message); }
+  };
+
+  $('searchBtn').onclick = async () => {
+    try {
+      const data = await call('GET', '/api/products?q=' + encodeURIComponent($('q').value));
+      $('results').innerHTML = data.results.map(p =>
+        `<tr><td>${p.name}</td><td>₹${p.price}</td>
+         <td><input type="number" value="1" style="width:70px" id="qty${p.id}" aria-label="Quantity"></td>
+         <td><button class="secondary" onclick="add(${p.id})">Add</button></td></tr>`).join('');
+      say(data.count + ' result(s)');
+    } catch (e) { say('Search failed: ' + e.message); }
+  };
+
+  async function add(productId) {
+    try {
+      if (!cartId) cartId = (await call('POST', '/api/cart', {}, true)).cartId;
+      const qty = $('qty' + productId).value;
+      const cart = await call('POST', `/api/cart/${cartId}/items`, { productId, qty }, true);
+      $('cartItems').innerHTML = cart.items.map(i => `<tr><td>${i.name}</td><td>× ${i.qty}</td><td>₹${i.price * i.qty}</td></tr>`).join('');
+      $('total').textContent = '₹' + cart.total;
+      $('cartBox').classList.remove('hidden');
+    } catch (e) { say('Add failed: ' + e.message); }
+  }
+
+  $('checkoutBtn').onclick = async () => {
+    try {
+      const order = await call('POST', '/api/checkout', { cartId }, true);
+      say(`Order ${order.orderId} confirmed. Total ₹${order.total}`);
+      cartId = null; $('cartItems').innerHTML = ''; $('total').textContent = '0';
+    } catch (e) { say('Checkout failed: ' + e.message); }
+  };
+</script>
+</body>
+</html>

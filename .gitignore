@@ -1,0 +1,4 @@
+results/
+app.log
+app.pid
+node_modules/

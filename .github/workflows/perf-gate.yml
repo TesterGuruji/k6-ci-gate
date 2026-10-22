@@ -1,0 +1,62 @@
+# k6 performance gate: runs on every push and pull request to main.
+# If any k6 threshold fails, `k6 run` exits non-zero (99), this job fails,
+# and with branch protection the pull request cannot be merged.
+
+name: Performance gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      checkout_extra_ms:
+        description: 'Demo only: extra checkout delay in ms (1500 makes the gate fail)'
+        default: '0'
+
+jobs:
+  k6-load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Start the app under test
+        run: |
+          nohup node app/server.js > app.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/health && exit 0
+            sleep 1
+          done
+          echo "App did not start"; cat app.log; exit 1
+        env:
+          CHECKOUT_EXTRA_MS: ${{ github.event.inputs.checkout_extra_ms || '0' }}
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 (this is the gate)
+        run: |
+          mkdir -p results
+          k6 run -e BASE_URL=http://localhost:3000 tests/load.js
+
+      - name: Show results on the job page
+        if: always()
+        run: cat results/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results
+          path: |
+            results/
+            app.log
