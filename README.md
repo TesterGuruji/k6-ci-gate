@@ -12,7 +12,6 @@ k6-ci-gate/
 ├── Jenkinsfile                   Jenkins pipeline (local k6 or Docker)
 └── README.md
 ```
-
 > The demo shop is deliberately buggy. Run it on localhost or CI only.
 
 ## 1. Run it locally
